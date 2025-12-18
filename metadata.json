@@ -1,0 +1,8 @@
+{
+  "name": "JardinerIA",
+  "description": "App para seguimiento de plantas con identificación por foto o nombre, utilizando dibujos lineales minimalistas y medidores de cuidado.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
