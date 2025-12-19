@@ -1,35 +1,82 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Droplets, Sun, Trash2, Search, Camera, X, Loader2, Sparkles, ChevronLeft, Info, MapPin, Heart, ThermometerSun, Snowflake, Lightbulb, Bell, Clock, AlertTriangle, Scissors, FlaskRound, Layers } from 'lucide-react';
-import { Plant, View, PlantCareInstructions, PlantLog } from './types';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Droplets, Sun, Trash2, Search, Camera, X, Loader2, Sparkles, ChevronLeft, Info, MapPin, Heart, ThermometerSun, Snowflake, Lightbulb, Bell, Clock, AlertTriangle, Scissors, FlaskRound, Layers, Edit2, Check, Home } from 'lucide-react';
+import { Plant, View, PlantCareInstructions, PlantLog, Room } from './types';
 import { identifyPlantByImage, searchPlantByName, generateLineArt, generateReferencePhoto } from './services/geminiService';
 import CameraModule from './components/CameraModule';
 import LightMeter from './components/LightMeter';
 
 const PASTEL_PALETTE = [
-  { bg: 'bg-[#FFF1F2]', border: 'border-[#FFF1F2]' }, // Rose
-  { bg: 'bg-[#EFF6FF]', border: 'border-[#EFF6FF]' }, // Blue
-  { bg: 'bg-[#ECFDF5]', border: 'border-[#ECFDF5]' }, // Emerald
-  { bg: 'bg-[#FFFBEB]', border: 'border-[#FFFBEB]' }, // Amber
-  { bg: 'bg-[#F5F3FF]', border: 'border-[#F5F3FF]' }, // Violet
-  { bg: 'bg-[#F0FDF4]', border: 'border-[#F0FDF4]' }, // Green
-  { bg: 'bg-[#FAF5FF]', border: 'border-[#FAF5FF]' }, // Purple
-  { bg: 'bg-[#FFF7ED]', border: 'border-[#FFF7ED]' }, // Orange
-  { bg: 'bg-[#F0FDFA]', border: 'border-[#F0FDFA]' }, // Teal
-  { bg: 'bg-[#FDF2F8]', border: 'border-[#FDF2F8]' }, // Pink
+  { bg: 'bg-[#FFF1F2]', border: 'border-[#FFF1F2]' }, 
+  { bg: 'bg-[#EFF6FF]', border: 'border-[#EFF6FF]' }, 
+  { bg: 'bg-[#ECFDF5]', border: 'border-[#ECFDF5]' }, 
+  { bg: 'bg-[#FFFBEB]', border: 'border-[#FFFBEB]' }, 
+  { bg: 'bg-[#F5F3FF]', border: 'border-[#F5F3FF]' }, 
+  { bg: 'bg-[#F0FDF4]', border: 'border-[#F0FDF4]' }, 
+  { bg: 'bg-[#FAF5FF]', border: 'border-[#FAF5FF]' }, 
+  { bg: 'bg-[#FFF7ED]', border: 'border-[#FFF7ED]' }, 
+  { bg: 'bg-[#F0FDFA]', border: 'border-[#F0FDFA]' }, 
+  { bg: 'bg-[#FDF2F8]', border: 'border-[#FDF2F8]' }, 
 ];
 
 const App: React.FC = () => {
   const [plants, setPlants] = useState<Plant[]>([]);
-  const [view, setView] = useState<View>('dashboard');
+  const [rooms, setRooms] = useState<Room[]>([{ id: 'room-1', name: 'Habitación 1' }]);
+  const [view, setViewInternal] = useState<View>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [selectedPlant, setSelectedPlant] = useState<Plant | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [roomNameInput, setRoomNameInput] = useState('');
+
+  // Función para cambiar de vista sincronizando con el historial del navegador
+  const navigateTo = useCallback((newView: View, plant: Plant | null = null) => {
+    const state = { view: newView, plantId: plant?.id || null };
+    window.history.pushState(state, '', '');
+    setViewInternal(newView);
+    setSelectedPlant(plant);
+  }, []);
+
+  // Manejar el botón de retroceso del navegador o gestos de deslizamiento
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state;
+      if (state && state.view) {
+        setViewInternal(state.view);
+        if (state.plantId) {
+          const plant = plants.find(p => p.id === state.plantId);
+          setSelectedPlant(plant || null);
+        } else {
+          setSelectedPlant(null);
+        }
+      } else {
+        // Estado inicial (dashboard)
+        setViewInternal('dashboard');
+        setSelectedPlant(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Reemplazar el estado inicial para que el "atrás" funcione desde la primera carga
+    if (!window.history.state) {
+      window.history.replaceState({ view: 'dashboard', plantId: null }, '', '');
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [plants]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('plant-tracker-v7');
-    if (saved) setPlants(JSON.parse(saved));
+    const savedPlants = localStorage.getItem('plant-tracker-v8-plants');
+    const savedRooms = localStorage.getItem('plant-tracker-v8-rooms');
+    
+    if (savedPlants) {
+      const parsedPlants = JSON.parse(savedPlants);
+      setPlants(parsedPlants);
+    }
+    if (savedRooms) setRooms(JSON.parse(savedRooms));
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -40,8 +87,12 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('plant-tracker-v7', JSON.stringify(plants));
+    localStorage.setItem('plant-tracker-v8-plants', JSON.stringify(plants));
   }, [plants]);
+
+  useEffect(() => {
+    localStorage.setItem('plant-tracker-v8-rooms', JSON.stringify(rooms));
+  }, [rooms]);
 
   const currentSeason = useMemo(() => {
     const month = new Date().getMonth();
@@ -68,10 +119,12 @@ const App: React.FC = () => {
         referenceImageUrl,
         instructions: info,
         logs: [],
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
+        roomId: rooms[0].id
       };
       setPlants(p => [newPlant, ...p]);
-      setView('dashboard');
+      // Volver al dashboard quitando la vista actual del historial
+      window.history.back(); 
     } catch (e) {
       console.error(e);
       alert("Error creando la ficha.");
@@ -99,6 +152,36 @@ const App: React.FC = () => {
     }));
     if (selectedPlant?.id === id) {
       setSelectedPlant(prev => prev ? ({ ...prev, lastWateredAt: new Date().toISOString() }) : null);
+    }
+  };
+
+  const addRoom = () => {
+    const newRoom: Room = {
+      id: crypto.randomUUID(),
+      name: `Habitación ${rooms.length + 1}`
+    };
+    setRooms([...rooms, newRoom]);
+  };
+
+  const renameRoom = (id: string) => {
+    if (!roomNameInput.trim()) return;
+    setRooms(rooms.map(r => r.id === id ? { ...r, name: roomNameInput } : r));
+    setEditingRoomId(null);
+  };
+
+  const deleteRoom = (id: string) => {
+    if (rooms.length <= 1) return alert("Debes tener al menos una habitación.");
+    const plantCount = plants.filter(p => p.roomId === id).length;
+    if (plantCount > 0 && !confirm(`Esta habitación tiene ${plantCount} plantas. ¿Moverlas a la primera habitación y eliminar?`)) return;
+    
+    setPlants(plants.map(p => p.roomId === id ? { ...p, roomId: rooms[0].id === id ? rooms[1].id : rooms[0].id } : p));
+    setRooms(rooms.filter(r => r.id !== id));
+  };
+
+  const movePlant = (plantId: string, newRoomId: string) => {
+    setPlants(plants.map(p => p.id === plantId ? { ...p, roomId: newRoomId } : p));
+    if (selectedPlant?.id === plantId) {
+      setSelectedPlant(prev => prev ? { ...prev, roomId: newRoomId } : null);
     }
   };
 
@@ -162,7 +245,7 @@ const App: React.FC = () => {
       
       {/* Dashboard View */}
       {view === 'dashboard' && (
-        <div className="max-w-2xl mx-auto p-6 space-y-6 pb-32 animate-in fade-in duration-500">
+        <div className="max-w-2xl mx-auto p-6 space-y-8 pb-32 animate-in fade-in duration-500">
           <header className="flex justify-between items-start pt-4">
             <div>
               <h1 className="text-2xl font-black text-emerald-900 italic">JardinerIA</h1>
@@ -172,7 +255,7 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setView('light-meter')} className="w-12 h-12 bg-white border border-slate-200 text-amber-500 rounded-2xl shadow-sm flex items-center justify-center active:scale-90 transition-transform">
+              <button onClick={() => navigateTo('light-meter')} className="w-12 h-12 bg-white border border-slate-200 text-amber-500 rounded-2xl shadow-sm flex items-center justify-center active:scale-90 transition-transform">
                 <Lightbulb size={24} />
               </button>
               <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-100">
@@ -181,48 +264,100 @@ const App: React.FC = () => {
             </div>
           </header>
 
-          {plants.length === 0 ? (
-            <div className="py-24 text-center space-y-4 opacity-30">
-              <Sparkles size={40} className="mx-auto" />
-              <p className="text-sm font-medium">Empieza escaneando tu primera planta.</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {plants.map((plant, idx) => {
-                const colors = PASTEL_PALETTE[idx % PASTEL_PALETTE.length];
-                const status = getWateringStatus(plant);
-                return (
-                  <div key={plant.id} onClick={() => { setSelectedPlant(plant); setView('plant-detail'); }} className={`border-4 rounded-[2.5rem] p-4 flex gap-4 shadow-sm hover:shadow-md active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden h-36 bg-white ${colors.border}`}>
-                    <div className={`w-24 h-full rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden ${colors.bg}`}>
-                      <img src={plant.imageUrl} className="max-w-[85%] max-h-[85%] object-contain mix-blend-multiply" alt={plant.name} />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-between py-1 relative z-10">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <h3 className="text-lg font-bold capitalize leading-tight text-slate-800">{plant.name}</h3>
-                          {status.isUrgent && <Bell size={16} className="text-red-500 fill-red-500 animate-bounce" />}
-                        </div>
-                        <p className="text-[10px] text-slate-400 italic truncate">{plant.species}</p>
+          <div className="space-y-10">
+            {rooms.map((room) => {
+              const roomPlants = plants.filter(p => p.roomId === room.id);
+              return (
+                <section key={room.id} className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 text-emerald-700 p-2 rounded-xl">
+                        <Home size={18} />
                       </div>
-                      <div className="space-y-2">
-                        <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight ${status.isUrgent ? 'text-red-500' : 'text-slate-400'}`}>
-                          <Droplets size={12} />
-                          {status.isUrgent ? '¡Toca regar ya!' : `Riego en ${status.daysRemaining} días`}
+                      {editingRoomId === room.id ? (
+                        <div className="flex items-center gap-2">
+                          <input 
+                            autoFocus
+                            className="bg-white border-b-2 border-emerald-500 outline-none font-black text-lg px-1 w-40"
+                            value={roomNameInput}
+                            onChange={(e) => setRoomNameInput(e.target.value)}
+                            onBlur={() => renameRoom(room.id)}
+                            onKeyDown={(e) => e.key === 'Enter' && renameRoom(room.id)}
+                          />
+                          <button onClick={() => renameRoom(room.id)} className="text-emerald-600"><Check size={20}/></button>
                         </div>
-                        <div className="flex gap-4">
-                          <BarMeter level={plant.instructions.lightLevel} iconColor="text-amber-500" barColor="bg-amber-400" icon={Sun} />
-                          <BarMeter level={plant.instructions.waterLevel} iconColor="text-blue-500" barColor="bg-blue-400" icon={Droplets} />
+                      ) : (
+                        <div className="flex items-center gap-2 group">
+                          <h2 className="text-xl font-black text-slate-800">{room.name}</h2>
+                          <button 
+                            onClick={() => { setEditingRoomId(room.id); setRoomNameInput(room.name); }}
+                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-emerald-500 transition-all"
+                          >
+                            <Edit2 size={14} />
+                          </button>
                         </div>
-                      </div>
+                      )}
                     </div>
+                    {rooms.length > 1 && !editingRoomId && (
+                      <button onClick={() => deleteRoom(room.id)} className="text-slate-300 hover:text-red-400 transition-colors">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  {roomPlants.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-100 rounded-[2.5rem] py-10 text-center text-slate-300 italic text-sm">
+                      Sin plantas en esta habitación
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {roomPlants.map((plant) => {
+                        const idx = plants.indexOf(plant);
+                        const colors = PASTEL_PALETTE[idx % PASTEL_PALETTE.length];
+                        const status = getWateringStatus(plant);
+                        return (
+                          <div key={plant.id} onClick={() => navigateTo('plant-detail', plant)} className={`border-4 rounded-[2.5rem] p-4 flex gap-4 shadow-sm hover:shadow-md active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden h-36 bg-white ${colors.border}`}>
+                            <div className={`w-24 h-full rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden ${colors.bg}`}>
+                              <img src={plant.imageUrl} className="max-w-[85%] max-h-[85%] object-contain mix-blend-multiply" alt={plant.name} />
+                            </div>
+                            <div className="flex-1 flex flex-col justify-between py-1 relative z-10">
+                              <div>
+                                <div className="flex justify-between items-start">
+                                  <h3 className="text-lg font-bold capitalize leading-tight text-slate-800">{plant.name}</h3>
+                                  {status.isUrgent && <Bell size={16} className="text-red-500 fill-red-500 animate-bounce" />}
+                                </div>
+                                <p className="text-[10px] text-slate-400 italic truncate">{plant.species}</p>
+                              </div>
+                              <div className="space-y-2">
+                                <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight ${status.isUrgent ? 'text-red-500' : 'text-slate-400'}`}>
+                                  <Droplets size={12} />
+                                  {status.isUrgent ? '¡Toca regar ya!' : `Riego en ${status.daysRemaining} días`}
+                                </div>
+                                <div className="flex gap-4">
+                                  <BarMeter level={plant.instructions.lightLevel} iconColor="text-amber-500" barColor="bg-amber-400" icon={Sun} />
+                                  <BarMeter level={plant.instructions.waterLevel} iconColor="text-blue-500" barColor="bg-blue-400" icon={Droplets} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            
+            <button 
+              onClick={addRoom}
+              className="w-full py-4 border-2 border-dashed border-emerald-100 rounded-[2rem] text-emerald-600 font-bold flex items-center justify-center gap-2 hover:bg-emerald-50 transition-colors"
+            >
+              <Plus size={20} /> Añadir Habitación
+            </button>
+          </div>
 
           <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-10">
-            <button onClick={() => setView('add-choice')} className="w-16 h-16 bg-emerald-700 text-white rounded-[1.5rem] shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
+            <button onClick={() => navigateTo('add-choice')} className="w-16 h-16 bg-emerald-700 text-white rounded-[1.5rem] shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
               <Plus size={32} />
             </button>
           </div>
@@ -234,22 +369,33 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-white animate-in slide-in-from-right duration-300 pb-20 bg-plant-pattern">
           <div className="p-8 space-y-6">
             <header className="flex justify-between items-start mb-4">
-              <button onClick={() => setView('dashboard')} className="p-2 bg-white rounded-xl shadow-sm text-slate-600 border border-slate-100">
+              <button onClick={() => window.history.back()} className="p-2 bg-white rounded-xl shadow-sm text-slate-600 border border-slate-100">
                 <ChevronLeft size={24} />
               </button>
-              <button onClick={() => { if(confirm("¿Eliminar ficha?")) { setPlants(p => p.filter(pl => pl.id !== selectedPlant.id)); setView('dashboard'); } }} className="p-2 bg-white rounded-xl shadow-sm text-red-400 border border-slate-100">
+              <button onClick={() => { if(confirm("¿Eliminar ficha?")) { setPlants(p => p.filter(pl => pl.id !== selectedPlant.id)); window.history.back(); } }} className="p-2 bg-white rounded-xl shadow-sm text-red-400 border border-slate-100">
                 <Trash2 size={20} />
               </button>
             </header>
 
             <div className="flex justify-between items-end">
               <div className="space-y-1">
+                <div className="flex items-center gap-2 text-emerald-600 mb-2">
+                  <Home size={14} />
+                  <select 
+                    className="bg-emerald-50 text-[10px] font-bold uppercase rounded-full px-2 py-0.5 outline-none cursor-pointer"
+                    value={selectedPlant.roomId}
+                    onChange={(e) => movePlant(selectedPlant.id, e.target.value)}
+                  >
+                    {rooms.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <h2 className="text-3xl font-black capitalize">{selectedPlant.name}</h2>
                 <p className="text-emerald-700 font-medium italic">{selectedPlant.species}</p>
               </div>
             </div>
 
-            {/* 1. PRÓXIMO RIEGO */}
             <section className="bg-blue-900 text-white rounded-[2rem] p-6 shadow-xl shadow-blue-100 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -280,7 +426,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* 2. ORIGEN */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <MapPin size={16} color="#446F4A" /> Origen
@@ -288,7 +433,6 @@ const App: React.FC = () => {
               <p className="text-[#969191] text-sm leading-relaxed">{selectedPlant.instructions.origin}</p>
             </section>
 
-            {/* 3. ACERCA DE ESTA PLANTA */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <Info size={16} color="#446F4A" /> Acerca de esta planta
@@ -296,7 +440,6 @@ const App: React.FC = () => {
               <p className="text-[#969191] text-sm leading-relaxed">{selectedPlant.instructions.description}</p>
             </section>
 
-            {/* 4. PROBLEMAS FRECUENTES */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-red-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <AlertTriangle size={16} color="#446F4A" /> Problemas frecuentes
@@ -304,7 +447,6 @@ const App: React.FC = () => {
               <p className="text-[#969191] text-sm leading-relaxed italic">{selectedPlant.instructions.frequentProblems}</p>
             </section>
 
-            {/* 5. ABONO Y/O FERTILIZACIÓN */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <FlaskRound size={16} color="#446F4A" /> Abono y/o fertilización
@@ -312,7 +454,6 @@ const App: React.FC = () => {
               <p className="text-[#969191] text-sm leading-relaxed">{selectedPlant.instructions.fertilization}</p>
             </section>
 
-            {/* NUEVA SECCIÓN: SUSTRATO */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <Layers size={16} color="#446F4A" /> Sustrato
@@ -322,7 +463,6 @@ const App: React.FC = () => {
               </p>
             </section>
 
-            {/* 6. PODA */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#446F4A] font-bold text-sm uppercase tracking-wider mb-2">
                 <Scissors size={16} color="#446F4A" /> Poda
@@ -330,7 +470,6 @@ const App: React.FC = () => {
               <p className="text-[#969191] text-sm leading-relaxed">{selectedPlant.instructions.pruning}</p>
             </section>
 
-            {/* 7. FRECUENCIA DE RIEGO */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#324DA0] font-bold text-sm uppercase tracking-wider mb-2">
                 <Droplets size={16} color="#324DA0" /> Frecuencia de Riego
@@ -351,7 +490,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* 8. REQUERIMIENTO LUMÍNICO */}
             <section className="bg-white p-5 rounded-3xl shadow-sm border border-emerald-50">
               <div className="flex items-center gap-2 text-[#F9AA32] font-bold text-sm uppercase tracking-wider mb-2">
                 Requerimiento Lumínico
@@ -361,7 +499,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* RECOMENDACIONES DEL MAESTRO */}
             <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] space-y-4 shadow-xl shadow-emerald-100/50 relative overflow-hidden mt-4">
               <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                  <Heart size={80} />
@@ -378,13 +515,13 @@ const App: React.FC = () => {
       {/* Vistas de Añadir y Carga */}
       {view === 'add-choice' && (
         <div className="fixed inset-0 bg-white z-50 p-8 flex flex-col justify-center animate-in fade-in zoom-in duration-200 bg-plant-pattern">
-          <button onClick={() => setView('dashboard')} className="absolute top-10 right-10 p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={28} /></button>
+          <button onClick={() => window.history.back()} className="absolute top-10 right-10 p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={28} /></button>
           <div className="max-w-xs mx-auto w-full space-y-4 text-center">
             <h2 className="text-2xl font-black mb-10 text-emerald-950">Añadir Planta</h2>
-            <button onClick={() => setView('camera')} className="w-full bg-emerald-700 text-white py-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all">
-              <Camera size={24} /> Escanear Foto
+            <button onClick={() => navigateTo('camera')} className="w-full bg-emerald-700 text-white py-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all">
+              <Camera size={24} /> Escanear planta
             </button>
-            <button onClick={() => setView('search')} className="w-full bg-slate-100 text-slate-700 py-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 active:scale-95 transition-all">
+            <button onClick={() => navigateTo('search')} className="w-full bg-slate-100 text-slate-700 py-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 active:scale-95 transition-all">
               <Search size={24} /> Buscar por nombre
             </button>
           </div>
@@ -393,7 +530,7 @@ const App: React.FC = () => {
 
       {view === 'search' && (
         <div className="max-w-md mx-auto p-8 pt-20 space-y-8 animate-in slide-in-from-bottom duration-300">
-          <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-slate-400 font-bold text-sm uppercase tracking-widest hover:text-slate-600 transition-colors"><ChevronLeft size={18}/> Cancelar</button>
+          <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-400 font-bold text-sm uppercase tracking-widest hover:text-slate-600 transition-colors"><ChevronLeft size={18}/> Cancelar</button>
           <h2 className="text-3xl font-black text-slate-800">Identificar</h2>
           <form onSubmit={handleSearch} className="space-y-4">
             <input autoFocus type="text" placeholder="Ej: Poto, Aloe Vera..." className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:border-emerald-500 outline-none transition-all text-lg" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -404,8 +541,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {view === 'camera' && <CameraModule onCapture={handleIdentify} onCancel={() => setView('dashboard')} isLoading={loading} />}
-      {view === 'light-meter' && <LightMeter onClose={() => setView('dashboard')} />}
+      {view === 'camera' && <CameraModule onCapture={handleIdentify} onCancel={() => window.history.back()} isLoading={loading} />}
+      {view === 'light-meter' && <LightMeter onClose={() => window.history.back()} />}
 
       {loading && (
         <div className="fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center p-10 text-center space-y-8 bg-plant-pattern">

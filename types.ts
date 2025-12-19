@@ -14,7 +14,7 @@ export interface PlantCareInstructions {
   frequentProblems: string;
   fertilization: string;
   pruning: string;
-  substrate: string; // Nuevo campo para consejos de sustrato
+  substrate: string; 
 }
 
 export interface PlantLog {
@@ -23,16 +23,22 @@ export interface PlantLog {
   date: string;
 }
 
+export interface Room {
+  id: string;
+  name: string;
+}
+
 export interface Plant {
   id: string;
   name: string;
   species: string;
-  imageUrl: string; // El dibujo line-art
-  referenceImageUrl: string; // La foto realista
+  imageUrl: string; 
+  referenceImageUrl: string; 
   instructions: PlantCareInstructions;
   logs: PlantLog[];
   lastWateredAt?: string;
   addedAt: string;
+  roomId: string; // ID de la habitación a la que pertenece
 }
 
 export type View = 'dashboard' | 'add-choice' | 'camera' | 'search' | 'plant-detail' | 'light-meter';
